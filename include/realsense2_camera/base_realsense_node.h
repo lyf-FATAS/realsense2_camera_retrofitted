@@ -339,6 +339,13 @@ namespace realsense2_camera
 
         sensor_msgs::PointCloud2 _msg_pointcloud;
         std::vector< unsigned int > _valid_pc_indices;
+
+        /*********************zxzx**********************/
+        bool _enable_emitter;
+        bool _emitter_on_off;
+        bool _enable_auto_exposure;
+        int _manual_exposure;
+        /*********************zxzx**********************/
     };//end class
 
 }

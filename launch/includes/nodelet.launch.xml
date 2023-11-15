@@ -107,7 +107,11 @@
   <arg name="reconnect_timeout"        default= "6.0"/>
   <arg name="wait_for_device_timeout"  default= "-1.0"/>
   <arg name="unite_imu_method"         default="none"/> <!-- Options are: [none, copy, linear_interpolation] -->
-  
+
+  <arg name="enable_emitter"      default="true"/>
+  <arg name="emitter_on_off"      default="true"/>
+  <arg name="auto_exposure"       default="true"/>
+  <arg name="exposure"            default="20000"/>
 
 
   <node unless="$(arg external_manager)" pkg="nodelet" type="nodelet" name="$(arg manager)" args="manager" output="$(arg output)" required="$(arg required)" respawn="$(arg respawn)"/>
@@ -214,5 +218,9 @@
     <param name="wait_for_device_timeout"  type="double" value="$(arg wait_for_device_timeout)"/>
     <param name="unite_imu_method"         type="str"    value="$(arg unite_imu_method)"/>
 
+    <param name="enable_emitter"            type="bool" value="$(arg enable_emitter)"/>
+    <param name="emitter_on_off"            type="bool" value="$(arg emitter_on_off)"/>
+    <param name="auto_exposure"             type="bool" value="$(arg auto_exposure)"/>
+    <param name="exposure"                  type="int" value="$(arg exposure)"/>
   </node>
 </launch>

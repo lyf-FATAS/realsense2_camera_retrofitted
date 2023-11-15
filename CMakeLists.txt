@@ -33,6 +33,10 @@ if(BUILD_WITH_OPENMP)
     endif()
 endif()
 
+# A dirty trick from https://github.com/IntelRealSense/realsense-ros/issues/2326 which fixes the following error:
+# /opt/ros/noetic/lib/nodelet/nodelet: symbol lookup error: ..._ws/devel/lib//librealsense2_camera.so: undefined symbol: _ZN2cv3MatC1Ev
+find_package(OpenCV REQUIRED)
+
 if(SET_USER_BREAK_AT_STARTUP)
 	message("GOT FLAG IN CmakeLists.txt")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBPDEBUG")
@@ -122,6 +126,7 @@ target_link_libraries(${PROJECT_NAME}
     ${realsense2_LIBRARY}
     ${catkin_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
+    ${OpenCV_LIBRARIES}
     )
 
 if(WIN32)

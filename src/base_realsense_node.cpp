@@ -592,6 +592,50 @@ void BaseRealSenseNode::registerDynamicOption(ros::NodeHandle& nh, rs2::options 
         }
         
     }
+
+    /***********************zxzx***************************/
+    if (sensor.supports(RS2_OPTION_EMITTER_ENABLED))
+    {
+        if (_enable_emitter)
+            sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 1.f); // Enable emitter
+        else
+            sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0.f); // Disable emitter
+    }
+
+    if (sensor.supports(RS2_OPTION_LASER_POWER))
+    {
+        // Query min and max values:
+        auto range = sensor.get_option_range(RS2_OPTION_LASER_POWER);
+        if (_enable_emitter)
+            sensor.set_option(RS2_OPTION_LASER_POWER, range.max); // Set max power
+        else
+            sensor.set_option(RS2_OPTION_LASER_POWER, 0.f); // Disable laser
+    }
+
+    if (sensor.supports(RS2_OPTION_ENABLE_AUTO_EXPOSURE))
+    {
+        if (_enable_auto_exposure)
+            sensor.set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 1.f); // Enable auto_exposure
+        else
+            sensor.set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 0.f); // Disable auto_exposure
+    }
+
+    if ((!_enable_auto_exposure) && sensor.supports(RS2_OPTION_EXPOSURE))
+    {
+        // Query min and max values:
+        auto range = sensor.get_option_range(RS2_OPTION_EXPOSURE);
+        sensor.set_option(RS2_OPTION_EXPOSURE, static_cast<float>(_manual_exposure) < range.max ? (float)_manual_exposure : range.max);
+    }
+
+    if (sensor.supports(RS2_OPTION_EMITTER_ON_OFF))
+    {
+        if (_emitter_on_off)
+            sensor.set_option(RS2_OPTION_EMITTER_ON_OFF, 1.f); // Enable emitter_on_off
+        else
+            sensor.set_option(RS2_OPTION_EMITTER_ON_OFF, 0.f); // Disable emitter_on_off
+    }
+    /***********************zxzx***************************/
+
     ddynrec->publishServicesTopics();
     _ddynrec.push_back(ddynrec);
 }
@@ -815,6 +859,41 @@ void BaseRealSenseNode::getParameters()
     _pnh.param("angular_velocity_cov", _angular_velocity_cov, static_cast<double>(0.01));
     _pnh.param("hold_back_imu_for_frames", _hold_back_imu_for_frames, HOLD_BACK_IMU_FOR_FRAMES);
     _pnh.param("publish_odom_tf", _publish_odom_tf, PUBLISH_ODOM_TF);
+
+    /**********************zxzx**************************/
+    _pnh.param("enable_emitter", _enable_emitter, true);
+    _pnh.param("emitter_on_off", _emitter_on_off, false);
+    _pnh.param("auto_exposure", _enable_auto_exposure, true);
+    _pnh.param("exposure", _manual_exposure, 10000);
+
+    if (_emitter_on_off)
+    {
+        if (!_enable_emitter)
+        {
+            printf("\n \033[41;37m [zxzx] error, \"enable_emitter\" must be true if \"emitter_on_off\" is true!\033[0m\n\n");
+            exit(EXIT_FAILURE);
+        }
+
+        if (_fps[IMAGE_STREAMS[0]] != _fps[IMAGE_STREAMS[2]] || _fps[IMAGE_STREAMS[2]] != _fps[IMAGE_STREAMS[3]])
+        {
+            printf("\n \033[41;37m [zxzx] error, \"depth_fps\" must equal to \"infra_fps\" if \"emitter_on_off\" is true!\033[0m\n\n");
+            exit(EXIT_FAILURE);
+        }
+
+        if ((_fps[IMAGE_STREAMS[0]] != 15 && _fps[IMAGE_STREAMS[0]] != 30) || (_fps[IMAGE_STREAMS[2]] != 15 && _fps[IMAGE_STREAMS[2]] != 30))
+        {
+            printf("\n \033[41;37m [zxzx] error, \"depth_fps\" and \"infra_fps\" must be 15 or 30 if \"emitter_on_off\" is true!\033[0m\n\n");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            _fps[IMAGE_STREAMS[0]] *= 2;
+            _fps[IMAGE_STREAMS[1]] *= 2;
+            _fps[IMAGE_STREAMS[2]] *= 2;
+            _fps[IMAGE_STREAMS[3]] *= 2;
+        }
+    }
+    /**********************zxzx**************************/
 }
 
 void BaseRealSenseNode::setupDevice()
@@ -2405,26 +2484,35 @@ void BaseRealSenseNode::publishFrame(rs2::frame f, const ros::Time& t,
     if(0 != info_publisher.getNumSubscribers() ||
        0 != image_publisher.first.getNumSubscribers())
     {
-        auto& cam_info = camera_info.at(stream);
-        if (cam_info.width != width)
+        /*********************zxzx**********************/
+        if (!_emitter_on_off ||
+            (stream.first == rs2_stream::RS2_STREAM_COLOR) ||
+            (stream.first == rs2_stream::RS2_STREAM_DEPTH && f.get_frame_metadata(RS2_FRAME_METADATA_FRAME_EMITTER_MODE)) ||
+            (stream.first == rs2_stream::RS2_STREAM_INFRARED && !f.get_frame_metadata(RS2_FRAME_METADATA_FRAME_EMITTER_MODE)))
         {
-            updateStreamCalibData(f.get_profile().as<rs2::video_stream_profile>());
+            auto& cam_info = camera_info.at(stream);
+            if (cam_info.width != width)
+            {
+                updateStreamCalibData(f.get_profile().as<rs2::video_stream_profile>());
+            }
+            cam_info.header.stamp = t;
+            cam_info.header.seq = seq[stream];
+            info_publisher.publish(cam_info);
+
+            sensor_msgs::ImagePtr img;
+            img = cv_bridge::CvImage(std_msgs::Header(), encoding.at(stream.first), image).toImageMsg();
+            img->width = width;
+            img->height = height;
+            img->is_bigendian = false;
+            img->step = width * bpp;
+            img->header.frame_id = cam_info.header.frame_id;
+            img->header.stamp = t;
+            img->header.seq = seq[stream];
+
+            image_publisher.first.publish(img);
         }
-        cam_info.header.stamp = t;
-        cam_info.header.seq = seq[stream];
-        info_publisher.publish(cam_info);
+        /*********************zxzx**********************/
 
-        sensor_msgs::ImagePtr img;
-        img = cv_bridge::CvImage(std_msgs::Header(), encoding.at(stream.first), image).toImageMsg();
-        img->width = width;
-        img->height = height;
-        img->is_bigendian = false;
-        img->step = width * bpp;
-        img->header.frame_id = cam_info.header.frame_id;
-        img->header.stamp = t;
-        img->header.seq = seq[stream];
-
-        image_publisher.first.publish(img);
         ROS_DEBUG("%s stream published", rs2_stream_to_string(f.get_profile().stream_type()));
     }
     if (is_publishMetadata)
